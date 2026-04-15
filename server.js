@@ -57,7 +57,8 @@ app.use((req, res, next) => {
 
 // CORS configuration
 const corsOptions = {
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  // origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin:process.env.CLIENT_URL|| 'https://nikhil-dms-frontend.vercel.app',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization']
