@@ -4,6 +4,7 @@
  */
 
 const { body, param, query, validationResult } = require('express-validator');
+const User = require('../models/User');
 
 /**
  * Handle validation errors
@@ -12,6 +13,7 @@ const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
   
   if (!errors.isEmpty()) {
+    console.error('Validation Errors for Route:', req.originalUrl, errors.array());
     return res.status(400).json({
       success: false,
       message: 'Validation failed',
@@ -33,22 +35,80 @@ const authValidation = {
   register: [
     body('name')
       .trim()
+      .escape()
       .notEmpty().withMessage('Name is required')
-      .isLength({ max: 100 }).withMessage('Name cannot exceed 100 characters'),
+      .isLength({ min: 2, max: 100 }).withMessage('Name must be between 2 and 100 characters'),
+    
     body('email')
       .trim()
       .notEmpty().withMessage('Email is required')
-      .isEmail().withMessage('Please provide a valid email')
-      .normalizeEmail(),
+      .isEmail().withMessage('Please provide a valid RFC-compliant email')
+      .normalizeEmail()
+      .custom(async (value) => {
+        const user = await User.findOne({ email: value });
+        if (user) {
+          throw new Error('Email already in use');
+        }
+        return true;
+      }),
+    
     body('password')
       .notEmpty().withMessage('Password is required')
-      .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+      .isStrongPassword({
+        minLength: 8,
+        minLowercase: 1,
+        minUppercase: 1,
+        minNumbers: 1,
+        minSymbols: 1
+      }).withMessage('Password must be at least 8 characters and contain at least one uppercase letter, one lowercase letter, one number, and one special character'),
+    
     body('role')
       .optional()
-      .isIn(['citizen', 'ngo', 'rescue_team']).withMessage('Invalid role'),
+      .isIn(['citizen', 'ngo', 'rescue_team', 'volunteer']).withMessage('Invalid role'),
+    
     body('phone')
-      .optional()
-      .matches(/^[\d\s\-+()]{10,20}$/).withMessage('Please provide a valid phone number'),
+      .trim()
+      .notEmpty().withMessage('Phone number is required')
+      .matches(/^(\+91[\-\s]?)?[6789]\d{9}$/)
+      .withMessage('Please provide a valid Indian phone number (+91 optionally followed by 10 digits starting with 6-9)')
+      .custom(async (value) => {
+        const normalized = value.replace(/\+91|\s|-/g, '');
+        const user = await User.findOne({ phone: new RegExp(normalized + '$') });
+        if (user) {
+          throw new Error('Phone number already in use');
+        }
+        return true;
+      }),
+    
+    body('organization.name')
+      .if(body('role').isIn(['ngo', 'rescue_team']))
+      .trim()
+      .escape()
+      .notEmpty().withMessage('Organization name is required for NGOs and Rescue Teams'),
+    
+    body('location.address')
+      .optional({ values: 'falsy' })
+      .trim()
+      .escape(),
+    
+    body('location.city')
+      .optional({ values: 'falsy' })
+      .trim()
+      .escape(),
+    
+    body('location.state')
+      .optional({ values: 'falsy' })
+      .trim()
+      .escape(),
+
+    body('location.coordinates.latitude')
+      .optional({ values: 'falsy' })
+      .isFloat({ min: -90, max: 90 }).withMessage('Invalid latitude'),
+
+    body('location.coordinates.longitude')
+      .optional({ values: 'falsy' })
+      .isFloat({ min: -180, max: 180 }).withMessage('Invalid longitude'),
+    
     handleValidationErrors
   ],
   
@@ -75,7 +135,13 @@ const authValidation = {
   resetPassword: [
     body('password')
       .notEmpty().withMessage('Password is required')
-      .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+      .isStrongPassword({
+        minLength: 8,
+        minLowercase: 1,
+        minUppercase: 1,
+        minNumbers: 1,
+        minSymbols: 1
+      }).withMessage('New password must be at least 8 characters and contain uppercase, lowercase, number, and symbol'),
     body('confirmPassword')
       .notEmpty().withMessage('Confirm password is required')
       .custom((value, { req }) => {
@@ -92,7 +158,13 @@ const authValidation = {
       .notEmpty().withMessage('Current password is required'),
     body('newPassword')
       .notEmpty().withMessage('New password is required')
-      .isLength({ min: 6 }).withMessage('New password must be at least 6 characters'),
+      .isStrongPassword({
+        minLength: 8,
+        minLowercase: 1,
+        minUppercase: 1,
+        minNumbers: 1,
+        minSymbols: 1
+      }).withMessage('New password must be at least 8 characters and contain uppercase, lowercase, number, and symbol'),
     handleValidationErrors
   ]
 };
@@ -105,13 +177,22 @@ const userValidation = {
     body('name')
       .optional()
       .trim()
-      .isLength({ max: 100 }).withMessage('Name cannot exceed 100 characters'),
+      .escape()
+      .isLength({ min: 2, max: 100 }).withMessage('Name must be between 2 and 100 characters'),
     body('phone')
       .optional()
-      .matches(/^[\d\s\-+()]{10,20}$/).withMessage('Please provide a valid phone number'),
+      .trim()
+      .matches(/^(\+91[\-\s]?)?[6789]\d{9}$/)
+      .withMessage('Please provide a valid Indian phone number'),
     body('location')
       .optional()
       .isObject().withMessage('Location must be an object'),
+    body('location.coordinates.latitude')
+      .optional()
+      .isFloat({ min: -90, max: 90 }).withMessage('Invalid latitude'),
+    body('location.coordinates.longitude')
+      .optional()
+      .isFloat({ min: -180, max: 180 }).withMessage('Invalid longitude'),
     handleValidationErrors
   ],
   
@@ -119,6 +200,7 @@ const userValidation = {
     body('organization.name')
       .optional()
       .trim()
+      .escape()
       .notEmpty().withMessage('Organization name cannot be empty'),
     body('organization.type')
       .optional()
@@ -136,7 +218,8 @@ const userValidation = {
       .isIn(['approved', 'rejected']).withMessage('Status must be approved or rejected'),
     body('reason')
       .optional()
-      .trim(),
+      .trim()
+      .escape(),
     handleValidationErrors
   ]
 };
@@ -149,6 +232,7 @@ const weatherValidation = {
     query('city')
       .optional()
       .trim()
+      .escape()
       .notEmpty().withMessage('City cannot be empty'),
     query('lat')
       .optional()
@@ -162,9 +246,11 @@ const weatherValidation = {
   addWeatherData: [
     body('location.city')
       .trim()
+      .escape()
       .notEmpty().withMessage('City is required'),
     body('location.state')
       .trim()
+      .escape()
       .notEmpty().withMessage('State is required'),
     body('location.coordinates.latitude')
       .isFloat({ min: -90, max: 90 }).withMessage('Invalid latitude'),
@@ -187,6 +273,7 @@ const disasterValidation = {
   createDisaster: [
     body('name')
       .trim()
+      .escape()
       .notEmpty().withMessage('Disaster name is required'),
     body('type')
       .notEmpty().withMessage('Disaster type is required')
@@ -201,13 +288,22 @@ const disasterValidation = {
       .withMessage('Invalid severity level'),
     body('description')
       .trim()
+      .escape()
       .notEmpty().withMessage('Description is required'),
     body('location.city')
       .trim()
+      .escape()
       .notEmpty().withMessage('City is required'),
     body('location.state')
       .trim()
+      .escape()
       .notEmpty().withMessage('State is required'),
+    body('location.coordinates.latitude')
+      .optional()
+      .isFloat({ min: -90, max: 90 }).withMessage('Invalid latitude'),
+    body('location.coordinates.longitude')
+      .optional()
+      .isFloat({ min: -180, max: 180 }).withMessage('Invalid longitude'),
     handleValidationErrors
   ],
   
@@ -228,6 +324,7 @@ const disasterValidation = {
       .isMongoId().withMessage('Invalid disaster ID'),
     body('content')
       .trim()
+      .escape()
       .notEmpty().withMessage('Update content is required'),
     body('type')
       .optional()
@@ -244,9 +341,11 @@ const alertValidation = {
   createAlert: [
     body('title')
       .trim()
+      .escape()
       .notEmpty().withMessage('Alert title is required'),
     body('message')
       .trim()
+      .escape()
       .notEmpty().withMessage('Alert message is required'),
     body('type')
       .notEmpty().withMessage('Alert type is required')
@@ -262,6 +361,7 @@ const alertValidation = {
       .withMessage('Invalid severity level'),
     body('targetLocation.city')
       .trim()
+      .escape()
       .notEmpty().withMessage('Target city is required'),
     body('timeline.expiresAt')
       .notEmpty().withMessage('Expiry date is required')
@@ -296,27 +396,37 @@ const emergencyValidation = {
       ]).withMessage('Invalid request type'),
     body('description')
       .trim()
+      .escape()
       .notEmpty().withMessage('Description is required')
       .isLength({ min: 15, max: 1000 }).withMessage('Description must be between 15 and 1000 characters'),
     body('location.address')
       .trim()
+      .escape()
       .notEmpty().withMessage('Address is required')
       .isLength({ min: 5, max: 200 }).withMessage('Address must be between 5 and 200 characters'),
     body('location.city')
       .trim()
+      .escape()
       .notEmpty().withMessage('City is required')
       .isLength({ min: 2, max: 100 }).withMessage('City must be between 2 and 100 characters'),
     body('location.state')
       .trim()
+      .escape()
       .notEmpty().withMessage('State is required')
       .isLength({ min: 2, max: 100 }).withMessage('State must be between 2 and 100 characters'),
+    body('location.coordinates.latitude')
+      .optional()
+      .isFloat({ min: -90, max: 90 }).withMessage('Invalid latitude'),
+    body('location.coordinates.longitude')
+      .optional()
+      .isFloat({ min: -180, max: 180 }).withMessage('Invalid longitude'),
     body('peopleAffected')
       .notEmpty().withMessage('People affected is required')
       .isInt({ min: 1, max: 1000 }).withMessage('People affected must be between 1 and 1000'),
     body('citizenInfo.alternativeContact')
       .optional({ values: 'falsy' })
       .trim()
-      .matches(/^[\d\s\-+()]{10,20}$/).withMessage('Alternative contact must be a valid phone number'),
+      .matches(/^(\+91[\-\s]?)?[6789]\d{9}$/).withMessage('Alternative contact must be a valid Indian phone number'),
     body('specialRequirements.language.preferred')
       .optional()
       .isIn(['en', 'hi', 'bn', 'ta', 'te', 'mr', 'other']).withMessage('Invalid preferred language'),
@@ -355,6 +465,7 @@ const emergencyValidation = {
     body('specialRequirements.other')
       .optional()
       .trim()
+      .escape()
       .isLength({ max: 500 }).withMessage('Other requirements cannot exceed 500 characters'),
     handleValidationErrors
   ],
@@ -387,6 +498,7 @@ const resourceValidation = {
   createResource: [
     body('name')
       .trim()
+      .escape()
       .notEmpty().withMessage('Resource name is required'),
     body('category')
       .notEmpty().withMessage('Category is required')
@@ -397,6 +509,7 @@ const resourceValidation = {
       ]).withMessage('Invalid category'),
     body('type')
       .trim()
+      .escape()
       .notEmpty().withMessage('Type is required'),
     body('quantity.total')
       .notEmpty().withMessage('Total quantity is required')
@@ -405,7 +518,14 @@ const resourceValidation = {
       .notEmpty().withMessage('Unit is required'),
     body('location.city')
       .trim()
+      .escape()
       .notEmpty().withMessage('City is required'),
+    body('location.coordinates.latitude')
+      .optional()
+      .isFloat({ min: -90, max: 90 }).withMessage('Invalid latitude'),
+    body('location.coordinates.longitude')
+      .optional()
+      .isFloat({ min: -180, max: 180 }).withMessage('Invalid longitude'),
     handleValidationErrors
   ],
   
@@ -427,9 +547,11 @@ const rescueTaskValidation = {
   createTask: [
     body('title')
       .trim()
+      .escape()
       .notEmpty().withMessage('Task title is required'),
     body('description')
       .trim()
+      .escape()
       .notEmpty().withMessage('Description is required'),
     body('type')
       .notEmpty().withMessage('Task type is required')
@@ -444,9 +566,11 @@ const rescueTaskValidation = {
       .isMongoId().withMessage('Invalid disaster ID'),
     body('location.address')
       .trim()
+      .escape()
       .notEmpty().withMessage('Address is required'),
     body('location.city')
       .trim()
+      .escape()
       .notEmpty().withMessage('City is required'),
     body('assignment.team')
       .notEmpty().withMessage('Assigned team is required')

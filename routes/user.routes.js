@@ -26,6 +26,7 @@ router.delete('/:id', isAdmin, userController.deleteUser);
 
 // Role-based routes
 router.get('/by-role/:role', isAdmin, userController.getUsersByRole);
+router.get('/volunteers/nearby', authorize('ngo', 'admin'), userController.getNearbyVolunteers);
 router.get('/rescue-teams/available', userController.getAvailableRescueTeams);
 
 // Single user routes

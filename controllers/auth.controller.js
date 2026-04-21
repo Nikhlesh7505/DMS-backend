@@ -7,6 +7,7 @@ const User = require('../models/User');
 const { generateToken } = require('../middleware/auth.middleware');
 const { asyncHandler } = require('../middleware/error.middleware');
 const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
 /**
  * @desc    Register new user
@@ -38,19 +39,16 @@ const register = asyncHandler(async (req, res) => {
   // Add organization details for NGOs and rescue teams
   if ((role === 'ngo' || role === 'rescue_team') && organization) {
     userData.organization = organization;
-    userData.approvalStatus = 'pending';
-  } else {
-    userData.approvalStatus = 'approved';
   }
 
+  // All non-admin roles require admin approval before login
+  userData.approvalStatus = (role === 'admin') ? 'approved' : 'pending';
+
   const user = await User.create(userData);
-  const requiresApproval = user.role === 'ngo' || user.role === 'rescue_team';
 
   res.status(201).json({
     success: true,
-    message: requiresApproval
-      ? 'Registration successful. Your account is pending admin approval. Please log in after approval.'
-      : 'Registration successful. Please log in to continue.',
+    message: 'Registration successful. Your account is pending admin approval. You will be able to log in once an admin approves your account.',
     data: {
       user: {
         id: user._id,
@@ -99,11 +97,11 @@ const login = asyncHandler(async (req, res) => {
     });
   }
 
-  // Check approval status for NGOs and rescue teams
-  if ((user.role === 'ngo' || user.role === 'rescue_team') && user.approvalStatus !== 'approved') {
+  // Check approval status for all non-admin roles
+  if (user.role !== 'admin' && user.approvalStatus !== 'approved') {
     return res.status(403).json({
       success: false,
-      message: `Your account is ${user.approvalStatus}. Please wait for admin approval.`
+      message: `Your account is ${user.approvalStatus}. Please wait for admin approval before logging in.`
     });
   }
 
@@ -319,9 +317,59 @@ const verifyEmail = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * @desc    Send Registration OTP via Email
+ * @route   POST /api/auth/send-otp
+ * @access  Public
+ */
+const sendOtp = asyncHandler(async (req, res) => {
+  const { email, otp, name } = req.body;
+  
+  if (!email || !otp) {
+    return res.status(400).json({ success: false, message: 'Please provide email and OTP' });
+  }
+
+  // Create transporter
+  if (!process.env.SMTP_HOST) {
+    console.warn('⚠️ SMTP_HOST not configured. Email will not be sent! Proceeding with mock success.');
+    return res.status(200).json({ success: true, message: 'Mock email sent since SMTP is not configured', messageId: 'mock-123' });
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT || 587,
+    secure: false,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+
+  const mailOptions = {
+    from: `"Disaster Management System" <${process.env.SMTP_USER}>`,
+    to: email,
+    subject: 'Your Account Verification Code',
+    text: `Hello ${name || 'User'},\n\nYour 6-digit verification code is: ${otp}\n\nDo not share this code with anyone.`,
+    html: `
+      <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+        <h2>Verify Your Identity</h2>
+        <p>Hello ${name || ''},</p>
+        <p>Your 6-digit verification code is:</p>
+        <h1 style="background: #f4f4f4; padding: 10px; display: inline-block; letter-spacing: 5px;">${otp}</h1>
+        <p>Please enter this code in the registration form to complete your setup.</p>
+        <p>If you didn't request this, you can safely ignore this email.</p>
+      </div>
+    `,
+  };
+
+  const info = await transporter.sendMail(mailOptions);
+  res.status(200).json({ success: true, message: 'OTP sent to email', messageId: info.messageId });
+});
+
 module.exports = {
   register,
   login,
+  sendOtp,
   getMe,
   updatePassword,
   forgotPassword,

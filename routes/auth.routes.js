@@ -11,6 +11,7 @@ const { authValidation } = require('../middleware/validation.middleware');
 // Public routes
 router.post('/register', authValidation.register, authController.register);
 router.post('/login', authValidation.login, authController.login);
+router.post('/send-otp', authController.sendOtp);
 router.post('/forgot-password', authValidation.forgotPassword, authController.forgotPassword);
 router.put('/reset-password/:token', authValidation.resetPassword, authController.resetPassword);
 router.get('/verify-email/:token', authController.verifyEmail);

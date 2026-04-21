@@ -74,6 +74,35 @@ const getProfile = asyncHandler(async (req, res) => {
 });
 
 /**
+ * @desc    Get volunteers by city or proximity
+ * @route   GET /api/users/volunteers/nearby
+ * @access  Private/NGO
+ */
+const getNearbyVolunteers = asyncHandler(async (req, res) => {
+  const { city, lat, lng, radius = 50 } = req.query;
+
+  const query = {
+    role: 'volunteer',
+    approvalStatus: 'approved',
+    isActive: true
+  };
+
+  if (city) {
+    query['location.city'] = { $regex: new RegExp(city, 'i') };
+  }
+
+  const volunteers = await User.find(query)
+    .select('name phone email location availabilityStatus')
+    .limit(50);
+
+  res.json({
+    success: true,
+    data: { volunteers }
+  });
+});
+
+
+/**
  * @desc    Get single user
  * @route   GET /api/users/:id
  * @access  Private
@@ -182,10 +211,10 @@ const approveUser = asyncHandler(async (req, res) => {
     });
   }
 
-  if (user.role !== 'ngo' && user.role !== 'rescue_team') {
+  if (user.role === 'admin') {
     return res.status(400).json({
       success: false,
-      message: 'Only NGO and Rescue Team accounts require approval'
+      message: 'Admin accounts do not require approval'
     });
   }
 
@@ -232,7 +261,7 @@ const deactivateUser = asyncHandler(async (req, res) => {
  */
 const getPendingApprovals = asyncHandler(async (req, res) => {
   const users = await User.find({
-    role: { $in: ['ngo', 'rescue_team'] },
+    role: { $ne: 'admin' },
     approvalStatus: 'pending'
   }).select('-password').sort({ createdAt: -1 });
 
@@ -333,5 +362,6 @@ module.exports = {
   getPendingApprovals,
   getUsersByRole,
   getAvailableRescueTeams,
+  getNearbyVolunteers,
   deleteUser
 };

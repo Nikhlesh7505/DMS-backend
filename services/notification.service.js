@@ -86,14 +86,22 @@ const notifyAlertRecipients = async (alert, users = []) => {
 };
 
 const notifyAdminsOfEmergencyRequest = async (request) => {
-  const admins = await User.find({ role: 'admin', isActive: true }).select('_id');
-  const userIds = admins.map((admin) => admin._id);
+  // Find all responders who should be notified (Admins, NGOs, and Rescue Teams)
+  const users = await User.find({ 
+    role: { $in: ['admin', 'ngo', 'rescue_team'] }, 
+    isActive: true 
+  }).select('_id role');
+  
+  const userIds = users.map((u) => u._id);
 
-  emitToRole('admin', 'emergency:new', {
-    requestId: request._id,
-    type: request.type,
-    city: request.location?.city,
-    priority: request.priority
+  // Emit real-time socket events to relevant roles
+  ['admin', 'ngo', 'rescue_team'].forEach(role => {
+    emitToRole(role, 'emergency:new', {
+      requestId: request._id,
+      type: request.type,
+      city: request.location?.city,
+      priority: request.priority
+    });
   });
 
   return notifyUsers({

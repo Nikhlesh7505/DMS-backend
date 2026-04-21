@@ -1,6 +1,6 @@
 /**
  * User Model
- * Supports multiple roles: admin, ngo, rescue_team, citizen
+ * Supports multiple roles: admin, ngo, rescue_team, citizen, volunteer
  */
 
 const mongoose = require('mongoose');
@@ -43,7 +43,7 @@ const userSchema = new mongoose.Schema({
   // Role-based access control
   role: {
     type: String,
-    enum: ['admin', 'ngo', 'rescue_team', 'citizen'],
+    enum: ['admin', 'ngo', 'rescue_team', 'citizen', 'volunteer'],
     default: 'citizen',
     required: true
   },
@@ -58,7 +58,7 @@ const userSchema = new mongoose.Schema({
     default: false
   },
   
-  // For NGOs and Rescue Teams - approval status
+  // For NGOs, Rescue Teams, Citizens and Volunteers - approval status
   approvalStatus: {
     type: String,
     enum: ['pending', 'approved', 'rejected'],
@@ -210,12 +210,12 @@ userSchema.methods.hasRole = function(...roles) {
   return roles.includes(this.role);
 };
 
-// Check if user is approved (for NGOs and rescue teams)
+// Check if user is approved (required for all non-admin roles)
 userSchema.methods.isApproved = function() {
-  if (this.role === 'ngo' || this.role === 'rescue_team') {
-    return this.approvalStatus === 'approved';
+  if (this.role === 'admin') {
+    return true;
   }
-  return true;
+  return this.approvalStatus === 'approved';
 };
 
 // Static method to find by email

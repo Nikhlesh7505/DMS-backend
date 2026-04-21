@@ -26,11 +26,13 @@ const dashboardRoutes = require('./routes/dashboard.routes');
 const shelterRoutes = require('./routes/shelter.routes');
 const notificationRoutes = require('./routes/notification.routes');
 const chatRoutes = require('./routes/chat.Routes');
+const utilsRoutes = require('./routes/utils.routes');
 
 // Import services
 const weatherService = require('./services/weather.service');
 const predictionService = require('./services/prediction.service');
 const alertService = require('./services/alert.service');
+const donationService = require('./services/donation.service');
 
 // Import middleware
 const { errorHandler } = require('./middleware/error.middleware');
@@ -57,8 +59,8 @@ app.use((req, res, next) => {
 
 // CORS configuration
 const corsOptions = {
-  // origin: process.env.CLIENT_URL || 'http://localhost:3000',
-  origin:process.env.CLIENT_URL|| 'https://nikhil-dms-frontend.vercel.app',
+  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  // origin:process.env.CLIENT_URL|| 'https://nikhil-dms-frontend.vercel.app',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -113,7 +115,10 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+const donationRoutes = require('./routes/donation.routes');
+
 // API Routes
+app.use('/api/utils', utilsRoutes);
 app.use('/api/auth', createRateLimiter({
   windowMs: parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS || `${15 * 60 * 1000}`, 10),
   max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '120', 10),
@@ -135,6 +140,7 @@ app.use('/api/rescue-tasks', rescueTaskRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/shelters', shelterRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/donations', donationRoutes);
 app.use('/api', chatRoutes);
 // Root endpoint
 app.get('/', (req, res) => {
@@ -177,6 +183,9 @@ const connectDB = async () => {
 
     // Start alert service
     alertService.startAlertService();
+
+    // Start donation monitoring service
+    donationService.startDonationMonitoring();
 
     console.log('All services initialized successfully');
   } catch (error) {
