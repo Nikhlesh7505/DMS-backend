@@ -25,6 +25,19 @@ const userSchema = new mongoose.Schema({
       'Please provide a valid email'
     ]
   },
+  username: {
+    type: String,
+    unique: true,
+    sparse: true,
+    lowercase: true,
+    trim: true,
+    minlength: [3, 'Username must be at least 3 characters'],
+    maxlength: [30, 'Username cannot exceed 30 characters'],
+    match: [
+      /^(?=.{3,30}$)[a-z0-9](?:[a-z0-9._]*[a-z0-9])?$/,
+      'Username may only contain lowercase letters, numbers, dots, and underscores'
+    ]
+  },
   password: {
     type: String,
     required: [true, 'Please provide a password'],
@@ -143,6 +156,12 @@ const userSchema = new mongoose.Schema({
   // Password reset token
   resetPasswordToken: String,
   resetPasswordExpire: Date,
+  passwordResetOtpHash: String,
+  passwordResetOtpExpire: Date,
+  passwordResetOtpAttempts: {
+    type: Number,
+    default: 0
+  },
   
   // Verification token
   verificationToken: String,
@@ -170,6 +189,7 @@ userSchema.virtual('profile').get(function() {
     id: this._id,
     name: this.name,
     email: this.email,
+    username: this.username,
     phone: this.phone,
     role: this.role,
     avatar: this.avatar,

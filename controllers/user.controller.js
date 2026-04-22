@@ -23,6 +23,7 @@ const getUsers = asyncHandler(async (req, res) => {
   if (search) {
     query.$or = [
       { name: { $regex: search, $options: 'i' } },
+      { username: { $regex: search, $options: 'i' } },
       { email: { $regex: search, $options: 'i' } }
     ];
   }
@@ -92,7 +93,7 @@ const getNearbyVolunteers = asyncHandler(async (req, res) => {
   }
 
   const volunteers = await User.find(query)
-    .select('name phone email location availabilityStatus')
+    .select('name username phone email location availabilityStatus')
     .limit(50);
 
   res.json({
@@ -129,10 +130,11 @@ const getUser = asyncHandler(async (req, res) => {
  * @access  Private
  */
 const updateProfile = asyncHandler(async (req, res) => {
-  const { name, phone, location, emergencyContact, notifications, specialization } = req.body;
+  const { name, username, phone, location, emergencyContact, notifications, specialization } = req.body;
 
   const updateData = {};
   if (name) updateData.name = name;
+  if (username) updateData.username = username.toLowerCase();
   if (phone) updateData.phone = phone;
   if (location) updateData.location = location;
   if (emergencyContact) updateData.emergencyContact = emergencyContact;
@@ -219,6 +221,7 @@ const approveUser = asyncHandler(async (req, res) => {
   }
 
   user.approvalStatus = status;
+  user.isVerified = status === 'approved';
   await user.save();
 
   // TODO: Send approval/rejection email

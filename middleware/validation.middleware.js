@@ -51,6 +51,19 @@ const authValidation = {
         }
         return true;
       }),
+
+    body('username')
+      .trim()
+      .notEmpty().withMessage('Username is required')
+      .matches(/^(?=.{3,30}$)[a-z0-9](?:[a-z0-9._]*[a-z0-9])?$/)
+      .withMessage('Username must be 3-30 characters and use only lowercase letters, numbers, dots, or underscores')
+      .custom(async (value) => {
+        const user = await User.findOne({ username: value.toLowerCase() });
+        if (user) {
+          throw new Error('Username already in use');
+        }
+        return true;
+      }),
     
     body('password')
       .notEmpty().withMessage('Password is required')
@@ -131,8 +144,56 @@ const authValidation = {
       .normalizeEmail(),
     handleValidationErrors
   ],
+
+  recoverEmail: [
+    body('phone')
+      .optional({ values: 'falsy' })
+      .trim()
+      .matches(/^(\+91[\-\s]?)?[6789]\d{9}$/)
+      .withMessage('Please provide a valid Indian phone number'),
+    body('username')
+      .optional({ values: 'falsy' })
+      .trim(),
+    body().custom((value) => {
+      if (!value?.phone && !value?.username) {
+        throw new Error('Phone number or username is required');
+      }
+      return true;
+    }),
+    handleValidationErrors
+  ],
   
   resetPassword: [
+    body('password')
+      .notEmpty().withMessage('Password is required')
+      .isStrongPassword({
+        minLength: 8,
+        minLowercase: 1,
+        minUppercase: 1,
+        minNumbers: 1,
+        minSymbols: 1
+      }).withMessage('New password must be at least 8 characters and contain uppercase, lowercase, number, and symbol'),
+    body('confirmPassword')
+      .notEmpty().withMessage('Confirm password is required')
+      .custom((value, { req }) => {
+        if (value !== req.body.password) {
+          throw new Error('Passwords do not match');
+        }
+        return true;
+      }),
+    handleValidationErrors
+  ],
+
+  resetPasswordWithOtp: [
+    body('email')
+      .trim()
+      .notEmpty().withMessage('Email is required')
+      .isEmail().withMessage('Please provide a valid email')
+      .normalizeEmail(),
+    body('otp')
+      .trim()
+      .notEmpty().withMessage('OTP is required')
+      .matches(/^\d{6}$/).withMessage('OTP must be a 6-digit number'),
     body('password')
       .notEmpty().withMessage('Password is required')
       .isStrongPassword({
@@ -179,6 +240,19 @@ const userValidation = {
       .trim()
       .escape()
       .isLength({ min: 2, max: 100 }).withMessage('Name must be between 2 and 100 characters'),
+    body('username')
+      .optional()
+      .trim()
+      .matches(/^(?=.{3,30}$)[a-z0-9](?:[a-z0-9._]*[a-z0-9])?$/)
+      .withMessage('Username must be 3-30 characters and use only lowercase letters, numbers, dots, or underscores')
+      .custom(async (value, { req }) => {
+        if (!value) return true;
+        const user = await User.findOne({ username: value.toLowerCase() });
+        if (user && user._id.toString() !== req.user.id) {
+          throw new Error('Username already in use');
+        }
+        return true;
+      }),
     body('phone')
       .optional()
       .trim()

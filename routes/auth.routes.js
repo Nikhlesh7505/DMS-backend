@@ -13,6 +13,8 @@ router.post('/register', authValidation.register, authController.register);
 router.post('/login', authValidation.login, authController.login);
 router.post('/send-otp', authController.sendOtp);
 router.post('/forgot-password', authValidation.forgotPassword, authController.forgotPassword);
+router.post('/recover-email', authValidation.recoverEmail, authController.recoverEmail);
+router.post('/reset-password-otp', authValidation.resetPasswordWithOtp, authController.resetPasswordWithOtp);
 router.put('/reset-password/:token', authValidation.resetPassword, authController.resetPassword);
 router.get('/verify-email/:token', authController.verifyEmail);
 
