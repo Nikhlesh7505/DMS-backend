@@ -17,6 +17,14 @@ const analyticsService = require('../services/analytics.service');
 const notificationService = require('../services/notification.service');
 const { asyncHandler } = require('../middleware/error.middleware');
 
+const toFiniteNumber = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+};
+
 /**
  * @desc    Get admin dashboard data
  * @route   GET /api/dashboard/admin
@@ -192,10 +200,13 @@ const getCitizenDashboard = asyncHandler(async (req, res) => {
   const notifications = await notificationService.getUserNotifications(userId, { limit: 5 });
 
   let nearbyShelters = [];
-  if (req.user.location?.coordinates?.longitude !== undefined && req.user.location?.coordinates?.latitude !== undefined) {
+  const longitude = toFiniteNumber(req.user.location?.coordinates?.longitude);
+  const latitude = toFiniteNumber(req.user.location?.coordinates?.latitude);
+
+  if (typeof longitude === 'number' && typeof latitude === 'number') {
     nearbyShelters = await Shelter.findNearby(
-      req.user.location.coordinates.longitude,
-      req.user.location.coordinates.latitude,
+      longitude,
+      latitude,
       50000,
       { status: 'active' }
     );

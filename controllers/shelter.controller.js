@@ -1,6 +1,14 @@
 const Shelter = require('../models/Shelter');
 const { asyncHandler } = require('../middleware/error.middleware');
 
+const toFiniteNumber = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+};
+
 const getShelters = asyncHandler(async (req, res) => {
   const { city, status, minAvailableBeds = 0, page = 1, limit = 20 } = req.query;
 
@@ -42,10 +50,21 @@ const getNearbyShelters = asyncHandler(async (req, res) => {
     });
   }
 
+  const parsedLongitude = toFiniteNumber(longitude);
+  const parsedLatitude = toFiniteNumber(latitude);
+  const parsedMaxDistance = toFiniteNumber(maxDistance);
+
+  if (parsedLongitude === null || parsedLatitude === null) {
+    return res.status(400).json({
+      success: false,
+      message: 'longitude and latitude must be valid numbers'
+    });
+  }
+
   const shelters = await Shelter.findNearby(
-    parseFloat(longitude),
-    parseFloat(latitude),
-    parseInt(maxDistance, 10),
+    parsedLongitude,
+    parsedLatitude,
+    parsedMaxDistance ?? 50000,
     { status: 'active' }
   );
 
