@@ -40,6 +40,7 @@ router.patch('/:id/respond-task', authorize('volunteer'), respondToTask);
 router.patch('/:id/complete-task', authorize('volunteer'), completeTask);
 
 // Admin routes
+router.patch('/:id/admin', authorize('admin'), adminDeleteWithFeedback);
 router.delete('/:id/admin', authorize('admin'), adminDeleteWithFeedback);
 
 // NGO/Admin routes

@@ -96,6 +96,9 @@ const donationSchema = new mongoose.Schema({
   acceptedAt: {
     type: Date
   },
+  completedAt: {
+    type: Date
+  },
   notes: {
     type: String,
     trim: true

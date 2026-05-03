@@ -10,6 +10,7 @@ const { authenticate, authorize, isAdmin } = require('../middleware/auth.middlew
 // Public routes
 router.get('/public', dashboardController.getPublicDashboard);
 router.get('/map-data', dashboardController.getMapData);
+router.get('/recent-donors', dashboardController.getRecentDonors);
 
 // Protected routes
 router.use(authenticate);

@@ -37,7 +37,8 @@ const getDonations = asyncHandler(async (req, res) => {
 
   const donations = await Donation.find(query)
     .populate('userId', 'name email phone')
-    .populate('assignedNGO', 'name organization')
+    .populate('assignedNGO', 'name email phone organization')
+    .populate('assignedVolunteer', 'name email phone location')
     .skip(skip)
     .limit(parseInt(limit))
     .sort({ createdAt: -1 });
@@ -103,7 +104,8 @@ const getMyDonations = asyncHandler(async (req, res) => {
 const getDonationById = asyncHandler(async (req, res) => {
   const donation = await Donation.findById(req.params.id)
     .populate('userId', 'name email phone avatar')
-    .populate('assignedNGO', 'name email phone organization');
+    .populate('assignedNGO', 'name email phone organization')
+    .populate('assignedVolunteer', 'name email phone location');
 
   if (!donation) {
     return res.status(404).json({
@@ -419,6 +421,11 @@ const updateDonationStatus = asyncHandler(async (req, res) => {
 
   const updateData = { status };
   if (notes) updateData.notes = notes;
+  if (status === 'Completed') {
+    updateData.completedAt = new Date();
+  } else if (status) {
+    updateData.completedAt = undefined;
+  }
 
   donation = await Donation.findByIdAndUpdate(req.params.id, updateData, {
     new: true,
@@ -462,7 +469,7 @@ const deleteDonation = asyncHandler(async (req, res) => {
 
 /**
  * @desc    Admin deletes donation and sets feedback
- * @route   DELETE /api/donations/:id/admin
+ * @route   PATCH /api/donations/:id/admin
  * @access  Private/Admin
  */
 const adminDeleteWithFeedback = asyncHandler(async (req, res) => {
@@ -478,6 +485,8 @@ const adminDeleteWithFeedback = asyncHandler(async (req, res) => {
   // Let's set status to Rejected and keep it so citizen sees feedback.
   donation.status = 'Rejected';
   donation.adminFeedback = feedback;
+  donation.flagged = false;
+  donation.flaggedAt = undefined;
   await donation.save();
 
   res.json({

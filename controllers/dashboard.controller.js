@@ -11,6 +11,7 @@ const EmergencyRequest = require('../models/EmergencyRequest');
 const Resource = require('../models/Resource');
 const RescueTask = require('../models/RescueTask');
 const WeatherData = require('../models/WeatherData');
+const Donation = require('../models/Donation');
 const predictionService = require('../services/prediction.service');
 const alertService = require('../services/alert.service');
 const analyticsService = require('../services/analytics.service');
@@ -40,7 +41,8 @@ const getAdminDashboard = asyncHandler(async (req, res) => {
     pendingRequests,
     activeTasks,
     totalResources,
-    lowStockResources
+    lowStockResources,
+    totalDonations
   ] = await Promise.all([
     User.countDocuments(),
     User.countDocuments({ approvalStatus: 'pending' }),
@@ -49,7 +51,8 @@ const getAdminDashboard = asyncHandler(async (req, res) => {
     EmergencyRequest.countDocuments({ status: { $in: ['pending', 'acknowledged'] } }),
     RescueTask.countDocuments({ status: { $in: ['assigned', 'in_progress', 'en_route', 'on_site'] } }),
     Resource.countDocuments(),
-    Resource.countDocuments({ 'quantity.available': { $lte: 10, $gt: 0 } })
+    Resource.countDocuments({ 'quantity.available': { $lte: 10, $gt: 0 } }),
+    Donation.countDocuments()
   ]);
 
   // Get recent data
@@ -96,7 +99,8 @@ const getAdminDashboard = asyncHandler(async (req, res) => {
         pendingRequests,
         activeTasks,
         totalResources,
-        lowStockResources
+        lowStockResources,
+        totalDonations
       },
       recent: {
         alerts: recentAlerts,
@@ -433,11 +437,57 @@ const getMapData = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * @desc    Get recent donors for landing page (public)
+ * @route   GET /api/dashboard/recent-donors
+ * @access  Public
+ */
+const getRecentDonors = asyncHandler(async (req, res) => {
+  // Fetch recent donations that have been accepted/completed — show donor generosity
+  const donations = await Donation.find({
+    status: { $in: ['Accepted', 'Assigned', 'In Process', 'In-Progress', 'Completed'] }
+  })
+    .populate('userId', 'name')
+    .sort({ createdAt: -1 })
+    .limit(12)
+    .select('userId category city quantity unit description createdAt status');
+
+  // Map to safe public data (first name only for privacy)
+  const donors = donations.map(d => ({
+    name: d.userId?.name?.split(' ')[0] || 'Anonymous',
+    city: d.city || 'India',
+    category: d.category,
+    quantity: d.quantity,
+    unit: d.unit,
+    description: d.description?.substring(0, 60),
+    time: d.createdAt,
+    status: d.status
+  }));
+
+  // Also get total count and total completed for stats
+  const [totalDonations, completedDonations] = await Promise.all([
+    Donation.countDocuments(),
+    Donation.countDocuments({ status: 'Completed' })
+  ]);
+
+  res.json({
+    success: true,
+    data: {
+      donors,
+      stats: {
+        total: totalDonations,
+        completed: completedDonations
+      }
+    }
+  });
+});
+
 module.exports = {
   getAdminDashboard,
   getResponderDashboard,
   getCitizenDashboard,
   getPublicDashboard,
   getAnalytics,
-  getMapData
+  getMapData,
+  getRecentDonors
 };

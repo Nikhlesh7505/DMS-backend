@@ -142,9 +142,9 @@ const predictionRules = {
         windGust: { min: 25, max: 35 }
       },
       [RISK_LEVELS.WARNING]: {
-        windSpeed: { min: 24, max: 32 },
-        pressure: { min: 980, max: 995 },
-        windGust: { min: 35, max: 50 }
+        windSpeed: { min: 1, max: 32 },
+        pressure: { min: 980, max: 1100 },
+        windGust: { min: 1, max: 50 }
       },
       [RISK_LEVELS.DANGER]: {
         windSpeed: { min: 32 },
@@ -154,8 +154,8 @@ const predictionRules = {
     },
     consecutiveReadings: {
       [RISK_LEVELS.WATCH]: 1,
-      [RISK_LEVELS.WARNING]: 2,
-      [RISK_LEVELS.DANGER]: 2
+      [RISK_LEVELS.WARNING]: 1,
+      [RISK_LEVELS.DANGER]: 1
     }
   },
   

@@ -182,6 +182,7 @@ userSchema.index({ role: 1 });
 userSchema.index({ approvalStatus: 1 });
 userSchema.index({ 'location.city': 1 });
 userSchema.index({ isActive: 1 });
+userSchema.index({ phone: 1 });
 
 // Virtual for user's full profile
 userSchema.virtual('profile').get(function() {

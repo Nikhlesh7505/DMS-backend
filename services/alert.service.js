@@ -122,28 +122,97 @@ const manualAlertTypeMap = {
 };
 
 const alertTypeToDisasterTypeMap = {
-  flood_warning: 'flood',
-  cyclone_alert: 'cyclone',
-  earthquake_warning: 'earthquake',
-  tsunami_warning: 'tsunami',
-  heatwave_warning: 'heatwave',
-  storm_warning: 'storm',
-  wildfire_warning: 'wildfire',
+  // ── Enum alert type keys ────────────────────────────────────────────────────
+  flood_warning:     'flood',
+  cyclone_alert:     'cyclone',
+  earthquake_warning:'earthquake',
+  tsunami_warning:   'tsunami',
+  heatwave_warning:  'heatwave',
+  storm_warning:     'storm',
+  wildfire_warning:  'wildfire',
   landslide_warning: 'landslide',
   evacuation_notice: null,
-  safety_advisory: null,
-  all_clear: null,
-  test: null,
-  flood: 'flood',
-  cyclone: 'cyclone',
+  safety_advisory:   null,
+  all_clear:         null,
+  test:              null,
+
+  // ── Canonical disaster schema types ────────────────────────────────────────
+  flood:      'flood',
+  cyclone:    'cyclone',
   earthquake: 'earthquake',
-  tsunami: 'tsunami',
-  drought: 'drought',
-  heatwave: 'heatwave',
-  wildfire: 'wildfire',
-  landslide: 'landslide',
-  storm: 'storm',
-  advisory: null
+  tsunami:    'tsunami',
+  drought:    'drought',
+  heatwave:   'heatwave',
+  wildfire:   'wildfire',
+  landslide:  'landslide',
+  storm:      'storm',
+  pandemic:   'pandemic',
+  chemical:   'chemical',
+  industrial: 'industrial',
+  other:      'other',
+  advisory:   null,
+
+  // ── Free-text variants from live sources (USGS, Open-Meteo, IMD, etc.) ─────
+  // Heat-related
+  heat_wave:             'heatwave',
+  'heat wave':           'heatwave',
+  extreme_heat:          'heatwave',
+  heatwave_warning:      'heatwave',
+
+  // Storm / Thunderstorm
+  thunderstorm:          'storm',
+  thunderstorms:         'storm',
+  severe_thunderstorm:   'storm',
+  thunder_storm:         'storm',
+  'severe thunderstorm': 'storm',
+  tropical_storm:        'cyclone',
+  tropical_cyclone:      'cyclone',
+  hurricane:             'cyclone',
+  typhoon:               'cyclone',
+  dust_storm:            'storm',
+  blizzard:              'storm',
+  snowstorm:             'storm',
+  wind_storm:            'storm',
+
+  // Rain / Flood
+  heavy_rain:            'flood',
+  'heavy rain':          'flood',
+  heavy_rainfall:        'flood',
+  flash_flood:           'flood',
+  'flash flood':         'flood',
+  river_flood:           'flood',
+  coastal_flood:         'flood',
+  flooding:              'flood',
+
+  // Earthquake variants
+  'moderate earthquake': 'earthquake',
+  'light earthquake':    'earthquake',
+  'strong earthquake':   'earthquake',
+  seismic:               'earthquake',
+
+  // Wildfire variants
+  forest_fire:   'wildfire',
+  bush_fire:     'wildfire',
+  'forest fire': 'wildfire',
+  'bush fire':   'wildfire',
+
+  // Landslide variants
+  mudslide:    'landslide',
+  mud_slide:   'landslide',
+  'mud slide': 'landslide',
+  rockslide:   'landslide',
+
+  // Tsunami variants
+  tidal_wave:   'tsunami',
+  'tidal wave': 'tsunami',
+
+  // Drought variants
+  drought_advisory: 'drought',
+  water_shortage:   'drought',
+
+  // Generic fallbacks
+  'safety advisory': null,
+  natural_disaster:  'other',
 };
 
 const alertSeverityToDisasterSeverityMap = {
