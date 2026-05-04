@@ -26,6 +26,38 @@ const toFiniteNumber = (value) => {
   return Number.isFinite(num) ? num : null;
 };
 
+const formatDonationCategory = (value) => {
+  const labels = {
+    clothes: 'clothing',
+    food: 'food supplies',
+    medicine: 'medical supplies',
+    medicines: 'medical supplies',
+    water: 'drinking water',
+    money: 'financial support',
+    other: 'essential supplies',
+    others: 'essential supplies'
+  };
+
+  return labels[value] || String(value || 'essential supplies').replace(/_/g, ' ');
+};
+
+const buildPublicDonationSummary = (donation) => {
+  const category = formatDonationCategory(donation.category);
+  const quantity = donation.quantity && donation.unit
+    ? `${donation.quantity} ${donation.unit}`
+    : donation.quantity
+      ? `${donation.quantity} units`
+      : '';
+  const location = [donation.city, donation.state].filter(Boolean).join(', ');
+
+  return [
+    'Donated',
+    quantity,
+    `of ${category}`,
+    location ? `for relief support in ${location}.` : 'for disaster relief support.'
+  ].filter(Boolean).join(' ');
+};
+
 /**
  * @desc    Get admin dashboard data
  * @route   GET /api/dashboard/admin
@@ -449,31 +481,39 @@ const getMapData = asyncHandler(async (req, res) => {
  * @access  Public
  */
 const getRecentDonors = asyncHandler(async (req, res) => {
-  // Fetch recent donations that have been accepted/completed — show donor generosity
+  // Fetch only real donations where the citizen explicitly opted in.
   const donations = await Donation.find({
-    status: { $in: ['Accepted', 'Assigned', 'In Process', 'In-Progress', 'Completed'] }
+    publicVisibility: true,
+    publicConsentVersion: 1,
+    publicSharedAt: { $exists: true, $ne: null }
   })
     .populate('userId', 'name')
-    .sort({ createdAt: -1 })
+    .sort({ publicSharedAt: -1, createdAt: -1 })
     .limit(12)
-    .select('userId category city quantity unit description createdAt status');
+    .select('userId category city state country quantity unit createdAt publicSharedAt appreciationMessage');
 
-  // Map to safe public data (first name only for privacy)
   const donors = donations.map(d => ({
-    name: d.userId?.name?.split(' ')[0] || 'Anonymous',
+    id: d._id,
+    name: d.userId?.name || 'Anonymous Citizen',
+    fullName: d.userId?.name || 'Anonymous Citizen',
     city: d.city || 'India',
+    state: d.state,
+    country: d.country,
     category: d.category,
-    quantity: d.quantity,
-    unit: d.unit,
-    description: d.description?.substring(0, 60),
-    time: d.createdAt,
-    status: d.status
+    summary: buildPublicDonationSummary(d),
+    appreciationMessage: d.appreciationMessage,
+    time: d.publicSharedAt || d.createdAt
   }));
 
-  // Also get total count and total completed for stats
-  const [totalDonations, completedDonations] = await Promise.all([
-    Donation.countDocuments(),
-    Donation.countDocuments({ status: 'Completed' })
+  const publicFeedQuery = {
+    publicVisibility: true,
+    publicConsentVersion: 1,
+    publicSharedAt: { $exists: true, $ne: null }
+  };
+
+  const [totalPublic, totalDonations] = await Promise.all([
+    Donation.countDocuments(publicFeedQuery),
+    Donation.countDocuments()
   ]);
 
   res.json({
@@ -482,7 +522,7 @@ const getRecentDonors = asyncHandler(async (req, res) => {
       donors,
       stats: {
         total: totalDonations,
-        completed: completedDonations
+        public: totalPublic
       }
     }
   });

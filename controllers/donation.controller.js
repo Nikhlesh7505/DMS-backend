@@ -139,7 +139,11 @@ const createDonation = asyncHandler(async (req, res) => {
   const donationData = {
     ...req.body,
     userId: req.user.id,
-    status: 'Pending'
+    status: 'Pending',
+    publicVisibility: false,
+    publicConsentVersion: 0,
+    publicSharedAt: undefined,
+    appreciationMessage: undefined
   };
 
   const donation = await Donation.create(donationData);
@@ -147,6 +151,50 @@ const createDonation = asyncHandler(async (req, res) => {
   res.status(201).json({
     success: true,
     message: 'Donation submitted successfully. Thank you for your contribution!',
+    data: { donation }
+  });
+});
+
+/**
+ * @desc    Update public visibility for a citizen donation
+ * @route   PATCH /api/donations/:id/public-visibility
+ * @access  Private/Owner
+ */
+const updatePublicVisibility = asyncHandler(async (req, res) => {
+  const donation = await Donation.findById(req.params.id);
+
+  if (!donation) {
+    return res.status(404).json({ success: false, message: 'Donation not found' });
+  }
+
+  const isOwner = donation.userId.toString() === req.user.id;
+  if (!isOwner && req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, message: 'Not authorized to update this donation' });
+  }
+
+  const publicVisibility = Boolean(req.body.publicVisibility);
+
+  if (publicVisibility && !isOwner) {
+    return res.status(403).json({
+      success: false,
+      message: 'Only the citizen who created this donation can approve public sharing.'
+    });
+  }
+
+  donation.publicVisibility = publicVisibility;
+  donation.publicSharedAt = publicVisibility ? new Date() : undefined;
+  donation.publicConsentVersion = publicVisibility ? 1 : 0;
+  donation.appreciationMessage = publicVisibility && req.body.appreciationMessage?.trim()
+    ? req.body.appreciationMessage.trim()
+    : undefined;
+
+  await donation.save();
+
+  res.json({
+    success: true,
+    message: publicVisibility
+      ? 'Donation will be shown on the public feed.'
+      : 'Donation will remain private.',
     data: { donation }
   });
 });
@@ -504,6 +552,7 @@ module.exports = {
   getDonationById,
   createDonation,
   updateDonation,
+  updatePublicVisibility,
   acceptDonation,
   assignVolunteer,
   getVolunteerTasks,

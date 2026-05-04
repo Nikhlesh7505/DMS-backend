@@ -7,6 +7,7 @@ const {
   getDonationById,
   createDonation,
   updateDonation,
+  updatePublicVisibility,
   acceptDonation,
   assignVolunteer,
   getVolunteerTasks,
@@ -26,6 +27,7 @@ router.use(authenticate);
 router.post('/', authorize('citizen', 'admin'), createDonation);
 router.get('/my', getMyDonations);
 router.put('/:id', authorize('citizen', 'admin'), updateDonation);
+router.patch('/:id/public-visibility', authorize('citizen', 'admin'), updatePublicVisibility);
 
 // NGO routes
 router.get('/pending', authorize('ngo', 'admin'), getPendingDonations);

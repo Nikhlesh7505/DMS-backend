@@ -99,6 +99,23 @@ const donationSchema = new mongoose.Schema({
   completedAt: {
     type: Date
   },
+  publicVisibility: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  publicSharedAt: {
+    type: Date
+  },
+  publicConsentVersion: {
+    type: Number,
+    default: 0
+  },
+  appreciationMessage: {
+    type: String,
+    trim: true,
+    maxlength: [240, 'Appreciation message cannot exceed 240 characters']
+  },
   notes: {
     type: String,
     trim: true
@@ -115,5 +132,6 @@ donationSchema.index({ status: 1 });
 donationSchema.index({ category: 1 });
 donationSchema.index({ assignedNGO: 1 });
 donationSchema.index({ flagged: 1 });
+donationSchema.index({ publicVisibility: 1, publicConsentVersion: 1, publicSharedAt: -1 });
 
 module.exports = mongoose.model('Donation', donationSchema);
