@@ -12,8 +12,46 @@ const notificationService = require('../services/notification.service');
 const { asyncHandler } = require('../middleware/error.middleware');
 
 const CITIZEN_DELETABLE_STATUSES = new Set(['pending', 'cancelled']);
+const RESPONDER_ROLES = new Set(['ngo', 'rescue_team']);
 
 const isRequestOwner = (request, userId) => request?.citizen?.toString() === userId;
+const isResponderOnly = (user) => RESPONDER_ROLES.has(user?.role);
+const isAssignedToUser = (request, userId) =>
+  request?.assignment?.assignedTo?.toString() === userId;
+const isAssignedToAnotherResponder = (request, userId) =>
+  request?.assignment?.assignedTo && !isAssignedToUser(request, userId);
+
+const buildResponderVisibleRequestQuery = (userId, baseQuery = {}) => ({
+  ...baseQuery,
+  $or: [
+    { status: 'pending', 'assignment.assignedTo': { $exists: false } },
+    { status: 'pending', 'assignment.assignedTo': null },
+    { 'assignment.assignedTo': userId }
+  ]
+});
+
+const rejectIfAssignedToAnotherResponder = (request, req, res) => {
+  if (isResponderOnly(req.user) && isAssignedToAnotherResponder(request, req.user.id)) {
+    res.status(409).json({
+      success: false,
+      message: 'This request was already accepted by another responder.'
+    });
+    return true;
+  }
+
+  return false;
+};
+
+const claimForResponderIfNeeded = (request, req) => {
+  if (!isResponderOnly(req.user) || request.assignment?.assignedTo) {
+    return;
+  }
+
+  request.assignment.assignedTo = req.user.id;
+  request.assignment.assignedAt = new Date();
+  request.assignment.assignedBy = req.user.id;
+  request.timeline.assignedAt = request.timeline.assignedAt || new Date();
+};
 
 const cleanupDeletedRequestReferences = async (requestId) => {
   const requestIdString = requestId.toString();
@@ -54,11 +92,14 @@ const getRequests = asyncHandler(async (req, res) => {
   if (priority) query.priority = priority;
   if (type) query.type = type;
   if (city) query['location.city'] = city;
+  const visibilityQuery = isResponderOnly(req.user)
+    ? buildResponderVisibleRequestQuery(req.user.id, query)
+    : query;
 
   // Pagination
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
-  const requests = await EmergencyRequest.find(query)
+  const requests = await EmergencyRequest.find(visibilityQuery)
     .populate('citizen', 'name phone email')
     .populate('assignment.assignedTo', 'name phone organization')
     .populate('assignment.assignedBy', 'name')
@@ -68,7 +109,7 @@ const getRequests = asyncHandler(async (req, res) => {
     .limit(parseInt(limit))
     .sort({ priority: -1, 'timeline.reportedAt': -1 });
 
-  const total = await EmergencyRequest.countDocuments(query);
+  const total = await EmergencyRequest.countDocuments(visibilityQuery);
 
   res.json({
     success: true,
@@ -90,7 +131,12 @@ const getRequests = asyncHandler(async (req, res) => {
  * @access  Private/Admin/Responder
  */
 const getPendingRequests = asyncHandler(async (req, res) => {
-  const requests = await EmergencyRequest.getPending()
+  const query = isResponderOnly(req.user)
+    ? buildResponderVisibleRequestQuery(req.user.id, { status: 'pending' })
+    : { status: { $in: ['pending', 'acknowledged'] } };
+
+  const requests = await EmergencyRequest.find(query)
+    .sort({ priority: -1, 'timeline.reportedAt': 1 })
     .populate('citizen', 'name phone email')
     .populate('assignment.assignedTo', 'name organization');
 
@@ -115,6 +161,17 @@ const getRequest = asyncHandler(async (req, res) => {
     .populate('resolution.resolvedBy', 'name');
 
   if (!request) {
+    return res.status(404).json({
+      success: false,
+      message: 'Emergency request not found'
+    });
+  }
+
+  if (
+    isResponderOnly(req.user) &&
+    request.assignment?.assignedTo &&
+    request.assignment.assignedTo._id.toString() !== req.user.id
+  ) {
     return res.status(404).json({
       success: false,
       message: 'Emergency request not found'
@@ -177,6 +234,11 @@ const updateStatus = asyncHandler(async (req, res) => {
     });
   }
 
+  if (rejectIfAssignedToAnotherResponder(request, req, res)) {
+    return;
+  }
+
+  claimForResponderIfNeeded(request, req);
   await request.updateStatus(status, note, req.user.id);
   await request.populate('citizen', 'name');
   await notificationService.notifyRequestStatusUpdate(request, {
@@ -199,33 +261,74 @@ const updateStatus = asyncHandler(async (req, res) => {
  * @access  Private/Admin/Responder
  */
 const acknowledgeRequest = asyncHandler(async (req, res) => {
-  const request = await EmergencyRequest.findById(req.params.id);
+  const request = await EmergencyRequest.findOneAndUpdate(
+    {
+      _id: req.params.id,
+      status: 'pending',
+      $or: [
+        { 'assignment.assignedTo': { $exists: false } },
+        { 'assignment.assignedTo': null }
+      ]
+    },
+    {
+      $set: {
+        status: 'acknowledged',
+        'assignment.assignedTo': req.user.id,
+        'assignment.assignedAt': new Date(),
+        'assignment.assignedBy': req.user.id,
+        'timeline.acknowledgedAt': new Date(),
+        'timeline.assignedAt': new Date(),
+        'timeline.lastUpdatedAt': new Date()
+      },
+      $push: {
+        updates: {
+          status: 'acknowledged',
+          note: 'Request acknowledged and accepted by responder',
+          updatedBy: req.user.id,
+          updatedAt: new Date()
+        }
+      }
+    },
+    { new: true }
+  );
 
   if (!request) {
+    const existingRequest = await EmergencyRequest.findById(req.params.id)
+      .populate('assignment.assignedTo', 'name organization');
+
+    if (
+      existingRequest?.assignment?.assignedTo &&
+      existingRequest.assignment.assignedTo._id.toString() !== req.user.id
+    ) {
+      return res.status(409).json({
+        success: false,
+        message: 'This request was already accepted by another responder.'
+      });
+    }
+
+    if (existingRequest) {
+      return res.status(200).json({
+        success: true,
+        message: `Request is already in ${existingRequest.status} status`,
+        data: { request: existingRequest }
+      });
+    }
+
     return res.status(404).json({
       success: false,
       message: 'Emergency request not found'
     });
   }
 
-  // If already acknowledged or further along, just return success (idempotent)
-  if (request.status !== 'pending') {
-    return res.status(200).json({
-      success: true,
-      message: `Request is already in ${request.status} status`,
-      data: { request }
-    });
-  }
-
-  await request.updateStatus('acknowledged', 'Request acknowledged by responder', req.user.id);
   await request.populate([
     { path: 'citizen', select: 'name phone email' },
-    { path: 'assignment.assignedTo', select: 'name organization' }
+    { path: 'assignment.assignedTo', select: 'name phone organization' },
+    { path: 'assignment.assignedBy', select: 'name' }
   ]);
   
   res.json({
     success: true,
-    message: 'Request acknowledged successfully',
+    message: 'Request accepted successfully',
     data: { request }
   });
 });
@@ -237,17 +340,58 @@ const acknowledgeRequest = asyncHandler(async (req, res) => {
  */
 const assignRequest = asyncHandler(async (req, res) => {
   const { userId } = req.body;
+  const assigneeId = isResponderOnly(req.user) ? req.user.id : userId;
 
-  const request = await EmergencyRequest.findById(req.params.id);
+  const request = await EmergencyRequest.findOneAndUpdate(
+    {
+      _id: req.params.id,
+      status: { $in: ['pending', 'acknowledged'] },
+      $or: [
+        { 'assignment.assignedTo': { $exists: false } },
+        { 'assignment.assignedTo': null },
+        { 'assignment.assignedTo': assigneeId }
+      ]
+    },
+    {
+      $set: {
+        status: 'assigned',
+        'assignment.assignedTo': assigneeId,
+        'assignment.assignedAt': new Date(),
+        'assignment.assignedBy': req.user.id,
+        'timeline.assignedAt': new Date(),
+        'timeline.lastUpdatedAt': new Date()
+      },
+      $push: {
+        updates: {
+          status: 'assigned',
+          note: 'Request assigned to responder',
+          updatedBy: req.user.id,
+          updatedAt: new Date()
+        }
+      }
+    },
+    { new: true }
+  );
 
   if (!request) {
+    const existingRequest = await EmergencyRequest.findById(req.params.id)
+      .populate('assignment.assignedTo', 'name organization');
+
+    if (
+      existingRequest?.assignment?.assignedTo &&
+      existingRequest.assignment.assignedTo._id.toString() !== assigneeId
+    ) {
+      return res.status(409).json({
+        success: false,
+        message: 'This request was already picked up by another responder.'
+      });
+    }
+
     return res.status(404).json({
       success: false,
       message: 'Emergency request not found'
     });
   }
-
-  await request.assign(userId, req.user.id);
 
   await request.populate([
     { path: 'citizen', select: 'name phone email' },
@@ -257,7 +401,7 @@ const assignRequest = asyncHandler(async (req, res) => {
 
   // Notify after population to ensure we have names if needed
   await notificationService.notifyRequestAssignment(request, {
-    responderId: userId,
+    responderId: assigneeId,
     responderName: request.assignment?.assignedTo?.name,
     actorId: req.user.id,
     actorName: req.user.name
@@ -320,6 +464,11 @@ const resolveRequest = asyncHandler(async (req, res) => {
     });
   }
 
+  if (rejectIfAssignedToAnotherResponder(request, req, res)) {
+    return;
+  }
+
+  claimForResponderIfNeeded(request, req);
   await request.resolve(outcome, notes, req.user.id);
   
   await request.populate([
@@ -358,6 +507,11 @@ const addUpdate = asyncHandler(async (req, res) => {
     });
   }
 
+  if (rejectIfAssignedToAnotherResponder(request, req, res)) {
+    return;
+  }
+
+  claimForResponderIfNeeded(request, req);
   request.updates.push({
     note,
     updatedBy: req.user.id,
@@ -497,6 +651,10 @@ const deleteRequest = asyncHandler(async (req, res) => {
       success: false,
       message: 'You can only delete your own emergency requests'
     });
+  }
+
+  if (isAdminOrResponder && rejectIfAssignedToAnotherResponder(request, req, res)) {
+    return;
   }
 
   // Business Logic: Citizens can only delete pending or cancelled requests

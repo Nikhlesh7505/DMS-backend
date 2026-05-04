@@ -136,8 +136,14 @@ const getResponderDashboard = asyncHandler(async (req, res) => {
     status: { $in: ['in_progress', 'en_route', 'on_site'] }
   }).populate('disaster', 'name type');
 
-  // Get all pending requests (not yet assigned)
-  const pendingRequests = await EmergencyRequest.find({ status: 'pending' })
+  // Get all pending requests that have not been accepted by another responder
+  const pendingRequests = await EmergencyRequest.find({
+    status: 'pending',
+    $or: [
+      { 'assignment.assignedTo': { $exists: false } },
+      { 'assignment.assignedTo': null }
+    ]
+  })
     .populate('citizen', 'name phone')
     .sort({ priority: -1, 'timeline.reportedAt': 1 });
 

@@ -1,6 +1,7 @@
 const crypto = require('crypto')
 const User = require('../models/User')
 const { generateToken } = require('../middleware/auth.middleware')
+const { sendOtpEmail } = require('../services/email.service')
 
 const buildSafeUser = (user) => ({
   id: user._id,
@@ -108,21 +109,34 @@ const login = async (req, res) => {
 
 const sendOtp = async (req, res) => {
   try {
+    const { email, name } = req.body
     const otp = String(req.body.otp || '').trim()
 
-    if (!req.body.email) {
+    if (!email) {
       return res.status(400).json({
         success: false,
         message: 'Email is required'
       })
     }
 
+    if (!/^\d{6}$/.test(otp)) {
+      return res.status(400).json({
+        success: false,
+        message: 'A valid 6-digit OTP is required'
+      })
+    }
+
+    await sendOtpEmail({
+      to: email,
+      name,
+      otp,
+      purpose: 'verification'
+    })
+
     res.json({
       success: true,
       message: 'OTP sent successfully.',
-      data: {
-        devOtp: otp || '123456'
-      }
+      data: process.env.NODE_ENV === 'development' ? { devOtp: otp } : {}
     })
   } catch (error) {
     console.error('Send OTP error:', error)
@@ -151,12 +165,17 @@ const forgotPassword = async (req, res) => {
     user.passwordResetOtpAttempts = 0
     await user.save({ validateBeforeSave: false })
 
+    await sendOtpEmail({
+      to: user.email,
+      name: user.name,
+      otp,
+      purpose: 'password_reset'
+    })
+
     res.json({
       success: true,
       message: 'OTP sent to your email.',
-      data: {
-        devOtp: otp
-      }
+      data: process.env.NODE_ENV === 'development' ? { devOtp: otp } : {}
     })
   } catch (error) {
     console.error('Forgot password error:', error)

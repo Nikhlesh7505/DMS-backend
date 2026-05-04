@@ -280,7 +280,11 @@ emergencyRequestSchema.pre('save', async function(next) {
 // Static method to get pending requests
 emergencyRequestSchema.statics.getPending = function() {
   return this.find({
-    status: { $in: ['pending', 'acknowledged'] }
+    status: 'pending',
+    $or: [
+      { 'assignment.assignedTo': { $exists: false } },
+      { 'assignment.assignedTo': null }
+    ]
   }).sort({ priority: -1, 'timeline.reportedAt': 1 });
 };
 
