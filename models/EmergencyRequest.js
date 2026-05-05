@@ -294,12 +294,12 @@ emergencyRequestSchema.statics.getByCitizen = function(citizenId) {
     .sort({ 'timeline.reportedAt': -1 });
 };
 
-// Static method to get assigned requests
+// Static method to get assigned requests (includes resolved so responders can see completed work)
 emergencyRequestSchema.statics.getAssignedTo = function(userId) {
   return this.find({
     'assignment.assignedTo': userId,
-    status: { $nin: ['resolved', 'cancelled'] }
-  }).sort({ priority: -1, 'timeline.assignedAt': 1 });
+    status: { $ne: 'cancelled' }
+  }).sort({ status: 1, priority: -1, 'timeline.assignedAt': -1 });
 };
 
 // Static method to get statistics
